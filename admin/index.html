@@ -1,0 +1,98 @@
+<!doctype html>
+<html lang="vi">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <title>Quản trị hệ thống đặt vé</title>
+    <style>
+        body {
+            margin: 0;
+            font-family: system-ui, sans-serif;
+            background: #f3f6fa;
+            color: #17243b
+        }
+
+        header {
+            padding: 24px;
+            background: #17243b;
+            color: white
+        }
+
+        h1 {
+            margin: 0;
+            font-size: 24px
+        }
+
+        header p {
+            color: #c6d4e8
+        }
+
+        nav {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+            padding: 16px
+        }
+
+        button {
+            font: inherit;
+            padding: 10px 16px;
+            border: 1px solid #c9d4e5;
+            border-radius: 8px;
+            background: white;
+            cursor: pointer
+        }
+
+        button[aria-selected=true] {
+            background: #235ed3;
+            color: white
+        }
+
+        section {
+            padding: 24px;
+            margin: 0 16px;
+            background: white;
+            border-radius: 12px
+        }
+
+        iframe {
+            width: 100%;
+            height: 80vh;
+            border: 0
+        }
+
+        section[hidden] {
+            display: none
+        }
+
+        section:has(iframe) {
+            padding: 0;
+            background: transparent
+        }
+    </style>
+</head>
+
+<body>
+    <header>
+        <h1>Quản trị hệ thống đặt vé</h1>
+        <p>Bản giữa kỳ · Tích hợp trang Notification của TV6</p>
+    </header>
+    <nav role="tablist" aria-label="Các dịch vụ"></nav>
+    <main id="panels"></main>
+    <script>
+        window.SERVICE_API_URLS = { movie: 'http://localhost:5001', showtime: 'http://localhost:5002', user: 'http://localhost:5003', booking: 'http://localhost:5004', payment: 'http://localhost:5005', notification: 'http://localhost:5006' };
+        const services = [['movie', 'Phim'], ['showtime', 'Suất chiếu'], ['user', 'Người dùng'], ['booking', 'Đơn đặt vé'], ['payment', 'Thanh toán'], ['notification', 'Thông báo']];
+        const nav = document.querySelector('nav'), panels = document.getElementById('panels');
+        for (const [key, label] of services) {
+            const button = document.createElement('button'); button.textContent = label; button.id = 'tab-' + key; button.setAttribute('role', 'tab'); button.setAttribute('aria-controls', 'panel-' + key);
+            const panel = document.createElement('section'); panel.id = 'panel-' + key; panel.setAttribute('role', 'tabpanel'); panel.setAttribute('aria-labelledby', button.id); panel.hidden = key !== 'notification'; button.setAttribute('aria-selected', String(!panel.hidden));
+            if (key === 'notification') { const frame = document.createElement('iframe'); frame.src = 'admin_notification.html'; frame.title = 'Nhật ký thông báo'; const error = document.createElement('p'); error.setAttribute('role', 'alert'); error.hidden = true; error.textContent = 'Không tải được trang quản trị Notification.'; frame.addEventListener('error', () => { error.hidden = false; }); panel.append(error, frame); }
+            else { const title = document.createElement('h2'); title.textContent = label; const status = document.createElement('p'); status.setAttribute('role', 'status'); status.textContent = 'Chưa tích hợp — đang chờ trang admin của thành viên phụ trách. API dự kiến: ' + window.SERVICE_API_URLS[key]; panel.append(title, status); }
+            button.addEventListener('click', () => { for (const el of panels.children) el.hidden = el !== panel; for (const el of nav.children) el.setAttribute('aria-selected', String(el === button)); });
+            nav.append(button); panels.append(panel);
+        }
+    </script>
+</body>
+
+</html>

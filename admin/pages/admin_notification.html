@@ -1,0 +1,230 @@
+<!doctype html>
+<html lang="vi">
+
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width,initial-scale=1">
+    <title>Nhật ký thông báo</title>
+    <style>
+        :root {
+            font-family: system-ui, sans-serif;
+            color: #17243b;
+            background: #f3f6fa
+        }
+
+        * {
+            box-sizing: border-box
+        }
+
+        body {
+            margin: 0;
+            padding: 28px
+        }
+
+        main {
+            max-width: 1200px;
+            margin: auto
+        }
+
+        header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            gap: 16px
+        }
+
+        h1 {
+            font-size: 28px;
+            margin: 0
+        }
+
+        p {
+            color: #586980;
+            line-height: 1.6
+        }
+
+        .tag {
+            font-size: 12px;
+            color: #226459;
+            background: #e4f4ed;
+            padding: 6px 10px;
+            border-radius: 20px
+        }
+
+        button {
+            border: 0;
+            background: #235ed3;
+            color: white;
+            padding: 11px 20px;
+            border-radius: 8px;
+            cursor: pointer;
+            font: inherit
+        }
+
+        button:disabled {
+            opacity: .55;
+            cursor: wait
+        }
+
+        .filters {
+            display: flex;
+            gap: 16px;
+            margin: 24px 0;
+            background: white;
+            padding: 20px;
+            border: 1px solid #dae2ee;
+            border-radius: 12px
+        }
+
+        label {
+            display: grid;
+            gap: 8px;
+            flex: 1;
+            font-size: 14px
+        }
+
+        input,
+        select {
+            font: inherit;
+            padding: 10px;
+            border: 1px solid #becbdb;
+            border-radius: 7px;
+            min-width: 0
+        }
+
+        .table-wrap {
+            overflow: auto;
+            background: white;
+            border: 1px solid #dae2ee;
+            border-radius: 12px
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            min-width: 760px
+        }
+
+        th,
+        td {
+            text-align: left;
+            padding: 16px;
+            border-bottom: 1px solid #e8edf4;
+            font-size: 14px
+        }
+
+        th {
+            background: #f8fafc;
+            color: #586980
+        }
+
+        td {
+            overflow-wrap: anywhere
+        }
+
+        #state {
+            padding: 16px 0;
+            color: #586980
+        }
+
+        #state.error {
+            color: #ae283c
+        }
+
+        footer {
+            font-size: 13px;
+            color: #66778d;
+            margin-top: 20px
+        }
+
+        @media(max-width:640px) {
+            body {
+                padding: 16px
+            }
+
+            header {
+                align-items: flex-start
+            }
+
+            h1 {
+                font-size: 23px
+            }
+
+            .filters {
+                flex-direction: column
+            }
+
+            .tag {
+                display: none
+            }
+        }
+    </style>
+</head>
+
+<body>
+    <main>
+        <header>
+            <!-- <div><span class="tag">TV6 · Notification Service</span> -->
+                <h1>Nhật ký thông báo</h1>
+                <p>Theo dõi thông báo đặt vé đã gửi giả lập qua EMAIL và SMS.</p>
+            </div><button id="reload" type="button">Tải lại</button>
+        </header>
+        <div class="filters"><label>Người nhận hoặc mã đơn<input id="search" type="search"
+                    placeholder="Ví dụ: user1 hoặc 3"></label><label>Kênh thông báo<select id="channel">
+                    <option value="">Tất cả kênh</option>EMAIL</option>
+                    <option>SMS</option>
+                </select></label></div>
+        <div id="state" role="status" aria-live="polite"></div>
+        <div class="table-wrap">
+            <table>
+                <thead>
+                    <tr>
+                        <th>ID nhật ký</th>
+                        <th>Mã đơn</th>
+                        <th>Người nhận</th>
+                        <th>Kênh</th>
+                        <th>Nội dung</th>
+                        <th>Thời gian</th>
+                    </tr>
+                </thead>
+                <tbody id="rows"></tbody>
+            </table>
+        </div>
+        <footer id="source"></footer>
+    </main>
+    <script>
+        const API_BASE = 'http://localhost:5006';
+        const apiBase = window.parent !== window && window.parent.location.origin === window.location.origin ? (window.parent.SERVICE_API_URLS?.notification || API_BASE) : API_BASE;
+        const rows = document.getElementById('rows'), state = document.getElementById('state'), reload = document.getElementById('reload');
+        const search = document.getElementById('search'), channel = document.getElementById('channel');
+        let logs = [], loaded = false;
+        document.getElementById('source').textContent = 'Nguồn API: ' + apiBase + ' · Chỉ xem · Thời gian hiển thị theo múi giờ trình duyệt';
+        function showState(message, error = false) { state.textContent = message; state.className = error ? 'error' : ''; }
+        function render() {
+            rows.replaceChildren(); if (!loaded) return;
+            const query = search.value.trim().toLocaleLowerCase('vi');
+            const filtered = logs.filter(item => (!query || item.username.toLocaleLowerCase('vi').includes(query) || String(item.bookingId).includes(query)) && (!channel.value || item.channel === channel.value));
+            for (const item of filtered) {
+                const tr = document.createElement('tr');
+                for (const value of [item.id, item.bookingId, item.username, item.channel, item.message, new Date(item.sentAt).toLocaleString('vi-VN')]) { const td = document.createElement('td'); td.textContent = String(value); tr.append(td); }
+                rows.append(tr);
+            }
+            showState(!logs.length ? 'Chưa có dữ liệu nhật ký.' : !filtered.length ? 'Không có kết quả phù hợp với bộ lọc.' : `Hiển thị ${filtered.length} / ${logs.length} nhật ký.`);
+        }
+        async function load() {
+            reload.disabled = true; loaded = false; rows.replaceChildren(); showState('Đang tải nhật ký…');
+            const controller = new AbortController(); const timer = setTimeout(() => controller.abort(), 10000);
+            try {
+                const response = await fetch(apiBase.replace(/\/$/, '') + '/api/notify/logs', { signal: controller.signal });
+                let payload; try { payload = await response.json(); } catch { throw new Error('API trả về JSON không hợp lệ.'); }
+                if (!response.ok || payload.status !== 'success') throw new Error(typeof payload.message === 'string' ? payload.message : `API trả lỗi HTTP ${response.status}.`);
+                if (!Array.isArray(payload.data) || !payload.data.every(item => item && Number.isInteger(item.id) && Number.isInteger(item.bookingId) && typeof item.username === 'string' && typeof item.channel === 'string' && typeof item.message === 'string' && typeof item.sentAt === 'string' && !Number.isNaN(Date.parse(item.sentAt)))) throw new Error('Dữ liệu nhật ký từ API không đúng hợp đồng.');
+                logs = payload.data; loaded = true; render();
+            } catch (error) { logs = []; showState(error.name === 'TypeError' || error.name === 'AbortError' ? 'Không kết nối được Notification Service. Kiểm tra service đã chạy ở cổng 5006, địa chỉ API và kết nối mạng.' : error.message, true); }
+            finally { clearTimeout(timer); reload.disabled = false; }
+        }
+        reload.addEventListener('click', load); search.addEventListener('input', render); channel.addEventListener('change', render); load();
+    </script>
+</body>
+
+</html>
