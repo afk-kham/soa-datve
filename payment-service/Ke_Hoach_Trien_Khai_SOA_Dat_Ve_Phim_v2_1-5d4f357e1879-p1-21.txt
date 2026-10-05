@@ -1,0 +1,845 @@
+                      MÔN KIẾN TRÚC HƯỚNG DỊCH VỤ (SOA)
+
+        KẾ HOẠCH TRIỂN KHAI BÀI TẬP LỚN
+            Hệ thống đặt vé xem phim theo kiến trúc Microservices
+                       6 service – 6 ngôn ngữ – 6 thành viên
+
+
+Phiên bản                2.1 (thay thế v2.0)
+
+Ngày cập nhật            02/10/2026
+
+Đối tượng đọc            Toàn bộ 6 thành viên trong nhóm
+
+Tài liệu đi kèm          Phiếu giao việc – Chuẩn bị giữa kỳ (hạn Chủ nhật 04/10/2026)
+
+Cách đọc                 Chương 1–5 đọc chung cả nhóm. Chương 6 mỗi người đọc kỹ phần của mình.
+                         Chương 8 xem lộ trình.
+
+
+
+
+Điểm chính của bản v2.1
+Bản v2.1 đã cập nhật theo yêu cầu của thầy: giữa kỳ làm bằng code thuần (core), cuối kỳ chuyển
+sang framework, sau đó mới ghép thành kiến trúc hướng dịch vụ. Công nghệ của từng ngôn ngữ đã
+chốt ở mục 2.2.
+Mục “Điểm cần xác nhận” ở Phụ lục C liệt kê những chỗ nhóm cần hỏi lại thầy.
+
+
+
+
+                           Kế hoạch triển khai SOA – Đặt vé phim v2.1 | Trang 1
+Chương 0. Những thay đổi so với bản v2.0
+Bản v2.0 được viết trước khi có đủ thông tin từ thầy. Bảng dưới liệt kê mọi điểm đã sửa để các
+bạn không dùng nhầm bản cũ.
+ #    Nội dung            v2.0                           v2.1                                 Lý do
+
+ 1    Công nghệ Python    Flask                          Core (giữa kỳ) → Django (cuối kỳ)    Thầy chốt Python –
+                                                                                              Core + Django
+
+ 2    Công nghệ PHP       PHP thuần + PDO                Core (giữa kỳ) → CodeIgniter 4       Thầy ghi PHP: Core
+                                                         (cuối kỳ)                            → CodeIgniter 4.0
+
+ 3    Công nghệ C#        Minimal API ngay từ đầu        HttpListener (giữa kỳ) → ASP.NET     Giữa kỳ phải là code
+                                                         Core 8 (cuối kỳ)                     thuần
+
+ 4    Công nghệ Java /    Spring Boot, Express,          Java: core HttpServer → Spring       Đi đúng lộ trình “code
+      Node / Go           net/http ngay từ đầu           Boot 3.x. Node: http → Express.      thuần → framework”
+                                                         Go: net/http cả hai kỳ
+
+ 5    Tên cơ sở dữ liệu   Nhiều service cùng ghi         Mỗi service một DB tên riêng:        Tránh trùng tên khi
+                          “cinema_db”                    movie_db, showtime_db, user_db,      chạy chung một máy,
+                                                         booking_db, payment_db,              đúng nguyên tắc
+                                                         notification_db                      Database-per-service
+
+ 6    Số CSDL             5                              6 (thêm notification_db)             Thầy yêu cầu mỗi
+                                                                                              thành viên có
+                                                                                              model/ERD riêng
+
+ 7    Bảng users          Không có role, email           Thêm cột role (USER/ADMIN) và        Phân quyền admin;
+                                                         email                                Notification cần địa
+                                                                                              chỉ nhận
+
+ 8    Quyền ghi           Công khai                      Giữa kỳ công khai; cuối kỳ           Tránh để ai cũng sửa
+      Movie/Showtime                                     POST/PUT/DELETE bắt buộc JWT         được dữ liệu
+                                                         role ADMIN
+
+ 9    Khóa JWT trong      signWith(HS256,                Keys.hmacShaKeyFor(secret.getB       Nếu không sửa, chữ
+      Java                "chuỗi") (hiểu là Base64)      ytes(UTF_8))                         ký Java sẽ khác C#
+                                                                                              và Node
+
+ 10   Booking             Lấy username từ body           Lấy username từ claim trong JWT;     Không tin dữ liệu do
+                                                         kiểm tra ghế đã bị đặt; xử lý khi    client gửi
+                                                         Payment/Notification lỗi
+
+ 11   Payment             Luôn trả PAID                  Thêm trạng thái FAILED (amount ≤     Có thể trình bày cả
+                                                         0 hoặc method sai) để demo nhánh     hai nhánh
+                                                         CANCELLED
+
+ 12   Notification        Không có DB, không xác         Thêm bảng notification_logs (đề      Có ERD để trình bày;
+                          thực                           xuất) và header nội bộ X-Internal-   chặn gọi từ bên ngoài
+                                                         Key
+
+ 13   Đường dẫn           showtime_service.php           /api/showtimes                       Thống nhất quy ước
+      Showtime                                                                                REST giữa mọi
+                                                                                              service
+
+
+
+
+                                  Kế hoạch triển khai SOA – Đặt vé phim v2.1 | Trang 2
+#    Nội dung   v2.0                          v2.1                                Lý do
+
+14   CORS       Chỉ ghi “cho phép *”          Bắt buộc xử lý cả request OPTIONS   Có header
+                                              (preflight)                         Authorization thì
+                                                                                  trình duyệt luôn gửi
+                                                                                  preflight
+
+15   Admin      Một trang chung, chưa rõ      Mỗi người làm 1 file                Phù hợp yêu cầu
+                ai làm                        admin_<service>.html, sau đó        “trang admin” của
+                                              ghép thành tab (cổng 8081)          thầy
+
+
+
+
+                       Kế hoạch triển khai SOA – Đặt vé phim v2.1 | Trang 3
+Chương 1. Yêu cầu của giảng viên
+Phần này tóm tắt những gì thầy đã yêu cầu qua tin nhắn của lớp (file YC.docx) và các xác nhận
+mới nhất.
+ Chủ đề          Thầy yêu cầu                                        Hệ quả cho nhóm
+
+ Lộ trình học    Cùng một đề tài: giữa kỳ làm API bằng ngôn          Mỗi bạn làm cùng một service hai lần: bản
+                 ngữ thuần; cuối kỳ làm bằng framework; sau đó       core rồi bản framework. Ý nghĩa môn học
+                 lên kiến trúc hướng dịch vụ.                        là phải tự xây bằng tay trước.
+
+ Quy mô nhóm     Mỗi nhóm từ 1 đến 6 bạn tùy nhóm. Nhóm đã           Nhóm có 6 người, 6 service.
+                 đăng ký.
+
+ Việc tuần này   (1) Đăng ký nhóm. (2) Đăng ký phần đề tài mỗi       Đây là nội dung của Phiếu giao việc đi
+                 người làm. (3) Phân tích Use Case ở mức ý           kèm. Mỗi bạn có đủ 5 mục cho phần của
+                 niệm, DFD mức 1, mức 2… (4) Cài đặt xong            mình.
+                 trang chức năng admin và model (ERD cơ bản).
+                 (5) Viết báo cáo tổng quan phần mình đã làm.
+
+ Chế tài         Buổi học tiếp theo thầy kiểm tra tiến độ; nhóm      Hạn nội bộ là Chủ nhật 04/10/2026 để còn
+                 nào không hoàn thành bị trừ 2 điểm giữa kỳ.         thời gian ghép và sửa.
+
+ Cách trình      Trình bày xây dựng dữ liệu trước, sau đó trình      Cần ERD tổng thể và dữ liệu mẫu thống
+ bày             bày dịch vụ của từng thành viên. Có cả phần         nhất trước khi từng người trình bày.
+                 chức năng admin.
+
+ Điểm cộng       Tạo 5 service cùng một ngôn ngữ hoặc 5 ngôn         Nhóm chọn nhiều ngôn ngữ nên đủ điều
+                 ngữ khác nhau đều được cộng điểm.                   kiện cộng điểm.
+
+ Cách tính       Các bạn dùng Java, PHP, JS, Go vẫn tính “như        Không có ai bị “làm lại” theo
+ điểm            bình thường”: giữa kỳ code thuần, cuối kỳ           FastAPI/Django. Chỉ riêng Python dùng
+                 framework.                                          Django ở cuối kỳ.
+
+
+
+ Lưu ý cách hiểu
+ Trong tin nhắn thầy, cụm “fast API” có nghĩa là API viết nhanh, gọn, bằng code thuần, không phải thư
+ viện FastAPI. Vì vậy giữa kỳ cả nhóm đều viết API mỏng bằng core của ngôn ngữ mình.
+ Hai bảng so sánh FastAPI/Django trong YC.docx chỉ để tham khảo, không có yêu cầu thực hiện thêm.
+
+
+
+
+                              Kế hoạch triển khai SOA – Đặt vé phim v2.1 | Trang 4
+Chương 2. Kiến trúc tổng quan
+2.1. Vì sao phải làm theo microservices
+Thầy yêu cầu “kiến trúc hướng dịch vụ”. Ba vấn đề của ứng dụng nguyên khối mà nhóm cần khắc
+phục khi trình bày:
+ Vấn đề của ứng dụng nguyên khối                Cách nhóm giải quyết
+
+ Một lỗi làm sập cả hệ thống                    Mỗi chức năng là một service riêng, chạy trên cổng riêng.
+                                                Notification chết thì đặt vé vẫn thành công.
+
+ Cả hệ thống bị buộc vào một ngôn               Mỗi service dùng ngôn ngữ và CSDL phù hợp với người làm
+ ngữ, một CSDL                                  (Database-per-service).
+
+ Khó mở rộng từng phần                          Các service chỉ giao tiếp qua REST + JSON, có thể thay thế hoặc
+                                                nhân bản độc lập.
+
+
+2.2. Sáu service và công nghệ đã chốt
+ TV / Service       Ngôn ngữ &     Giữa kỳ (core)           Cuối kỳ (framework)      CSDL             Bảo mật
+                    cổng
+
+ TV1 Movie          Python :5001   http.server + driver     Django (ORM + Django     MySQL movie_db   Đọc công khai;
+                                   MySQL                    Admin)                                    ghi cần ADMIN
+
+ TV2 Showtime       PHP :5002      PHP thuần + PDO,         CodeIgniter 4 (cần PHP   MySQL            Đọc công khai;
+                                   chạy php -S              8.1+)                    showtime_db      ghi cần ADMIN
+
+ TV3 User/Auth      Java :5003     com.sun.net.httpser      Spring Boot 3.x + JPA    MySQL user_db    Cấp JWT;
+                                   ver + JDBC + BCrypt      + jjwt                                    /users cần
+                                                                                                      ADMIN
+
+ TV4 Booking        C# :5004       HttpListener +           ASP.NET Core 8           SQL Server       JWT bắt buộc
+                                   ADO.NET                  (Minimal API) + EF       (Windows) hoặc
+                                                            Core                     MySQL
+                                                                                     booking_db
+
+ TV5 Payment        Node.js :500   Module http + driver     Express + Mongoose       MongoDB          JWT bắt buộc
+                    5              MongoDB                                           payment_db
+
+ TV6 Notification   Go :5006       net/http +               net/http cấu trúc lại    MySQL            Header nội bộ
+                                   database/sql             (middleware, package)    notification_d   X-Internal-
+                                                                                     b (đề xuất)      Key
+
+
+
+Go không có framework trong danh sách của thầy, nên bạn TV6 giữ net/http ở cả hai kỳ. Ở cuối kỳ, TV6
+nâng cấp chất lượng code: chia package, thêm middleware, ghi log, kiểm thử.
+
+
+
+
+                                   Kế hoạch triển khai SOA – Đặt vé phim v2.1 | Trang 5
+2.3. Sơ đồ kiến trúc
+
+
+
+
+ Hình 1. Client App gọi trực tiếp Movie, Showtime, User và Booking. Booking đóng vai trò Orchestrator, gọi tiếp
+                     Payment rồi Notification. Admin Dashboard gọi trực tiếp từng service.
+
+2.4. Luồng đặt vé (cuối kỳ)
+ 1. Người dùng đăng nhập: Client gọi POST :5003/api/login và nhận JWT (chứa sub,
+    userId, role).
+ 2. Client lấy phim GET :5001/api/movies và suất chiếu GET :5002/api/showtimes?
+    movie_id=… (công khai, không cần token).
+ 3. Người dùng chọn ghế, Client gửi POST :5004/api/booking kèm header Authorization:
+    Bearer <JWT>.
+ 4. Booking verify JWT, lấy username từ token, kiểm tra ghế chưa bị đặt, tính tổng tiền rồi lưu
+    đơn với trạng thái PENDING.
+ 5. Booking gọi POST :5005/api/payment (chuyển tiếp JWT). Payment verify JWT, giả lập
+    thanh toán và lưu giao dịch PAID hoặc FAILED.
+ 6. Nếu PAID: Booking cập nhật đơn thành PAID, sau đó gọi POST :5006/api/notify kèm X-
+    Internal-Key. Nếu FAILED: đơn thành CANCELLED và không gửi thông báo.
+ 7. Booking trả kết quả cuối cùng cho Client. Nếu Notification lỗi, đơn vẫn PAID (chỉ ghi log lỗi).
+
+
+ Phạm vi giữa kỳ
+ Giữa kỳ chưa có bước 4–7: Booking chỉ lưu đơn PENDING. Việc gọi chéo giữa các service và JWT
+ thuộc cuối kỳ.
+
+
+
+
+                               Kế hoạch triển khai SOA – Đặt vé phim v2.1 | Trang 6
+Chương 3. Thiết kế dữ liệu
+Thầy yêu cầu trình bày dữ liệu trước, vì vậy mọi bạn phải tạo CSDL và vẽ ERD của mình. Mỗi
+service sở hữu đúng một CSDL; bảng ở service này không có FOREIGN KEY thật tới service
+khác, chỉ có khóa ngoại logic (vẽ nét đứt trong ERD).
+
+3.1. Cấu trúc từng CSDL
+ CSDL                   Bảng / Collection      Các cột (khóa chính in đậm)
+
+ movie_db               movies                 id INT AUTO_INCREMENT, title VARCHAR(255) NOT NULL,
+ MySQL                                         genre VARCHAR(100), duration INT (phút), poster
+                                               VARCHAR(255)
+
+ showtime_db            showtimes              id INT AUTO_INCREMENT, movie_id INT NOT NULL *(FK logic
+ MySQL                                         → movies.id)*, cinema VARCHAR(150), room VARCHAR(50),
+                                               time DATETIME, price INT
+
+ user_db                users                  id INT AUTO_INCREMENT, username VARCHAR(50) UNIQUE
+ MySQL                                         NOT NULL, password_hash VARCHAR(100) NOT NULL, email
+                                               VARCHAR(100), role VARCHAR(10) DEFAULT 'USER'
+
+ booking_db             bookings               id INT AUTO_INCREMENT, movie_id INT *(FK logic)*,
+ SQL Server hoặc                               showtime_id INT *(FK logic)*, username VARCHAR(50) *(FK logic
+ MySQL                                         → users.username)*, seats VARCHAR(100) (ví dụ “A1,A2”),
+                                               total_price INT, status VARCHAR(10) DEFAULT 'PENDING',
+                                               created_at DATETIME
+
+ payment_db             collection             _id ObjectId, bookingId Number *(FK logic → bookings.id)*,
+ MongoDB                transactions           amount Number, method String (MOMO/VNPAY/CASH), status
+                                               String (PAID/FAILED), paidAt Date
+
+ notification_db        notification_log       id INT AUTO_INCREMENT, booking_id INT *(FK logic)*,
+ MySQL *(đề xuất)*      s                      username VARCHAR(50), channel VARCHAR(20), message
+                                               VARCHAR(255), sent_at DATETIME
+
+
+Ghi chú: các cột time, status nên đặt trong dấu backtick khi viết SQL cho MySQL để tránh nhầm với từ khóa.
+
+3.2. Quan hệ logic giữa các service
+ Từ (service.bảng.cột)                      Đến (service.bảng.cột)                 Ý nghĩa
+
+ Showtime.showtimes.movie_id                Movie.movies.id                        Suất chiếu thuộc phim nào
+
+ Booking.bookings.movie_id                  Movie.movies.id                        Đơn đặt vé cho phim nào
+
+ Booking.bookings.showtime_id               Showtime.showtimes.id                  Đơn đặt vé cho suất nào
+
+ Booking.bookings.username                  User.users.username                    Ai là người đặt
+
+ Payment.transactions.bookingId             Booking.bookings.id                    Giao dịch thanh toán cho đơn
+                                                                                   nào
+
+ Notification.notification_logs.booking_i   Booking.bookings.id                    Thông báo gửi cho đơn nào
+ d
+
+
+
+
+                                 Kế hoạch triển khai SOA – Đặt vé phim v2.1 | Trang 7
+Điều cần nhớ khi trình bày
+Vì không có khóa ngoại thật, tính nhất quán dữ liệu do service gọi chịu trách nhiệm. Ví dụ Booking
+nên kiểm tra showtime_id tồn tại bằng cách hỏi Showtime service (cuối kỳ), không dựa vào CSDL.
+Dữ liệu mẫu dùng chung (Phụ lục A) đảm bảo id phim, id suất chiếu, tên người dùng khớp giữa các
+service khi ghép.
+
+
+
+
+                           Kế hoạch triển khai SOA – Đặt vé phim v2.1 | Trang 8
+Chương 4. Hợp đồng API chung
+Đây là “luật chơi” chung: mọi service phải theo đúng để Client, Admin và Booking gọi được nhau
+dù viết bằng ngôn ngữ khác nhau.
+
+4.1. Quy ước
+  • Định dạng dữ liệu: JSON, header Content-Type: application/json; charset=utf-8.
+  • Phản hồi thành công: {"status":"success","data": …}. Phản hồi lỗi:
+    {"status":"error","message":"…"}.
+  • Mã HTTP: 200 (lấy dữ liệu / sửa / xóa), 201 (tạo mới), 400 (dữ liệu sai), 401 (thiếu hoặc sai
+    token), 403 (không đủ quyền), 404 (không tìm thấy), 405 (sai method), 500 (lỗi server).
+  • CORS: trả Access-Control-Allow-Origin: *, Access-Control-Allow-Methods: GET,
+    POST, PUT, DELETE, OPTIONS, Access-Control-Allow-Headers: Content-Type,
+    Authorization. Bắt buộc trả 204 cho request OPTIONS.
+  • Lắng nghe trên `0.0.0.0` để các máy khác trong nhóm gọi được khi ghép.
+  • Truy vấn CSDL bằng câu lệnh có tham số (prepared statement) để tránh SQL injection.
+    Không nối chuỗi trực tiếp từ dữ liệu người dùng.
+  • Không bao giờ trả `password_hash` ra ngoài API.
+
+4.2. Danh sách endpoint
+ Service        Method & URL                      Giữa kỳ      Cuối kỳ         Mô tả
+
+ Movie 5001     GET /api/movies                   Công khai    Công khai       Danh sách phim
+
+                GET /api/movies/{id}              Công khai    Công khai       Chi tiết một phim
+
+                POST /api/movies                  Công khai    ADMIN           Thêm phim
+
+                PUT /api/movies/{id}              Công khai    ADMIN           Sửa phim
+
+                DELETE /api/movies/{id}           Công khai    ADMIN           Xóa phim
+
+ Showtime       GET /api/showtimes?movie_id=      Công khai    Công khai       Suất chiếu (lọc theo phim, tùy
+ 5002                                                                          chọn)
+
+                GET /api/showtimes/{id}           Công khai    Công khai       Chi tiết một suất
+
+                POST / PUT / DELETE               Công khai    ADMIN           Quản lý suất chiếu
+                /api/showtimes[/{id}]
+
+ User 5003      POST /api/login                   Công khai    Công khai       Đăng nhập, trả thông tin user
+                                                                               (giữa kỳ) hoặc JWT (cuối kỳ)
+
+                GET /api/users                    Công khai    ADMIN           Danh sách người dùng (không
+                                                                               có mật khẩu)
+
+ Booking 5004   POST /api/booking                 Công khai    JWT             Đặt vé
+
+                GET /api/booking                  Công khai    ADMIN           Danh sách đơn (admin xem)
+
+                GET /api/booking/{id}             Công khai    JWT             Chi tiết một đơn
+
+ Payment 5005   POST /api/payment                 Công khai    JWT             Thanh toán giả lập
+
+                GET /api/payment                  Công khai    ADMIN           Lịch sử giao dịch
+
+
+
+                            Kế hoạch triển khai SOA – Đặt vé phim v2.1 | Trang 9
+ Service         Method & URL                         Giữa kỳ       Cuối kỳ         Mô tả
+
+ Notification    POST /api/notify                     Công khai     X-Internal-     Gửi thông báo (giả lập)
+ 5006                                                               Key
+
+                 GET /api/notify/logs                 Công khai     ADMIN           Nhật ký thông báo
+
+
+Giữa kỳ chưa có JWT nên các endpoint để công khai để dễ kiểm thử và để trang admin gọi được. Cuối kỳ mới
+siết quyền như cột “Cuối kỳ”.
+
+4.3. Ví dụ nội dung gửi / nhận
+Đăng nhập POST /api/login
+ { "username": "user1", "password": "User@123" }
+ → 200 { "status":"success", "data": { "id":2, "username":"user1", "role":"USER",
+ "token":"<JWT hoặc demo-token>" } }
+
+
+Đặt vé POST /api/booking
+ // Cuối kỳ: header Authorization: Bearer <JWT>, username lấy từ token
+ { "movieId":1, "showtimeId":1, "seats":["A1","A2"] }
+ → 201 { "status":"success", "data": { "id":4, "totalPrice":180000, "status":"PENDING" }
+ }
+ // Giữa kỳ (chưa có JWT) body có thêm "username" và "pricePerSeat"
+
+
+Thanh toán POST /api/payment
+ { "bookingId":4, "amount":180000, "method":"MOMO" }
+ → 201 { "status":"success", "data": { "bookingId":4, "amount":180000, "method":"MOMO",
+ "status":"PAID" } }
+
+
+Thông báo POST /api/notify
+ // header X-Internal-Key: <khóa nội bộ>
+ { "username":"user1", "bookingId":4, "channel":"EMAIL" }
+ → 200 { "status":"success", "message":"Đã gửi thông báo cho user1" }
+
+
+
+
+                                Kế hoạch triển khai SOA – Đặt vé phim v2.1 | Trang 10
+Chương 5. Xác thực bằng JWT (áp dụng ở cuối kỳ)
+User/Auth là nơi cấp token. Booking và Payment tự kiểm tra token bằng cùng một khóa bí mật,
+không cần gọi lại User/Auth. Đây là lý do cả ba service phải dùng đúng cùng thuật toán và cùng
+khóa.
+ Mục                     Quy định chung
+
+ Thuật toán              HS256
+
+ Khóa bí mật             day-la-khoa-bi-mat-cho-do-an-soa-2024-phai-du-256bit (từ v2.0; tối thiểu
+                         32 ký tự). Đặt trong file cấu hình / biến môi trường của từng service, không rải
+                         trong code.
+
+ Cách chuyển khóa        UTF-8 thô ở mọi ngôn ngữ (không giải mã Base64).
+ thành byte
+
+ Claims                  sub = username, userId, role (USER/ADMIN), iat, exp (hết hạn sau 2 giờ).
+
+ Cách gửi                Header Authorization: Bearer <token>. Booking chuyển tiếp nguyên token này
+                         sang Payment.
+
+ Thư viện gợi ý          Java: jjwt 0.12.x. C#: Microsoft.AspNetCore.Authentication.JwtBearer. Node:
+                         jsonwebtoken. Python (Django): PyJWT. PHP (CI4): firebase/php-jwt.
+
+
+
+ Ba lỗi cần tránh
+ Lỗi hay gặp 1: Java ký bằng khóa đã bị hiểu là Base64, C#/Node ký bằng UTF-8 → verify thất bại dù
+ cùng một chuỗi khóa.
+ Lỗi hay gặp 2: thiếu xử lý OPTIONS nên trình duyệt chặn request có header Authorization.
+ Lỗi hay gặp 3: lệch giờ giữa các máy làm token “chưa hiệu lực” hoặc “hết hạn” sớm. Cho phép lệch 60
+ giây.
+ Cách kiểm tra nhanh: dán token vào jwt.io với cùng khóa để xem có verify được không.
+
+
+
+Giữa kỳ không bắt buộc làm JWT thật. TV3 có thể trả một chuỗi token tạm (ví dụ demo-token-
+<username>) để Client và Admin có dữ liệu hiển thị.
+
+
+
+
+                           Kế hoạch triển khai SOA – Đặt vé phim v2.1 | Trang 11
+Chương 6. Nhiệm vụ của từng thành viên
+Mỗi thành viên sở hữu trọn vẹn một service: CSDL, ERD, Use Case, DFD, API, trang admin và
+báo cáo. Chi tiết việc cần nộp trước Chủ nhật nằm trong Phiếu giao việc.
+
+TV1 – Movie Service (Python)
+Vai trò                 Quản lý danh mục phim; là nguồn dữ liệu phim cho Client, Showtime, Booking.
+
+Giữa kỳ                 http.server (BaseHTTPRequestHandler) + pymysql. CRUD đầy đủ 5 endpoint.
+                        Trang admin_movie.html có bảng, form thêm/sửa, nút xóa.
+
+Cuối kỳ                 Django: model Movie, view trả JSON, bật CORS (django-cors-headers), verify JWT
+                        cho POST/PUT/DELETE. Django Admin có sẵn làm điểm cộng.
+
+CSDL                    MySQL movie_db.movies (chọn MySQL vì ORM của Django làm việc tốt nhất với
+                        CSDL quan hệ).
+
+Sản phẩm chính          ERD 1 bảng, Use Case (Khách, Admin), DFD 0/1/2, API CRUD, admin, báo cáo.
+
+
+
+ Lưu ý kỹ thuật riêng
+ Python 3.10+. Cần tự viết bộ định tuyến bằng regex cho đường dẫn /api/movies/{id}. Dùng
+ ThreadingHTTPServer để không bị nghẽn khi nhiều request.
+
+
+TV2 – Showtime Service (PHP)
+Vai trò                 Quản lý lịch chiếu và giá vé. Booking dùng giá vé từ đây (cuối kỳ).
+
+Giữa kỳ                 PHP thuần + PDO, chạy php -S 0.0.0.0:5002 router.php. File router.php đọc
+                        REQUEST_URI và gọi đúng hàm. CRUD đầy đủ + lọc theo movie_id.
+
+Cuối kỳ                 CodeIgniter 4 (PHP 8.1+): Routes, Controller, Model, Filter cho CORS và JWT
+                        (firebase/php-jwt). Chạy php spark serve --host 0.0.0.0 --port 5002.
+
+CSDL                    MySQL showtime_db.showtimes, cột movie_id là khóa ngoại logic.
+
+Sản phẩm chính          ERD kèm khóa ngoại logic nét đứt tới Movie, Use Case, DFD 0/1/2, API, admin, báo
+                        cáo.
+
+
+
+ Lưu ý kỹ thuật riêng
+ Đọc body JSON bằng file_get_contents('php://input'). Đặt charset utf8mb4. Dùng
+ http_response_code() cho mã lỗi, và nhớ trả 204 cho OPTIONS.
+
+
+TV3 – User/Auth Service (Java)
+Vai trò                 Quản lý tài khoản, kiểm tra mật khẩu, cấp JWT. Là nguồn tin cậy duy nhất về danh
+                        tính.
+
+Giữa kỳ                 com.sun.net.httpserver.HttpServer + JDBC (MySQL Connector/J) + jBCrypt. API
+                        POST /api/login và GET /api/users. Trả token tạm.
+
+Cuối kỳ                 Spring Boot 3.x: Spring Web, Spring Data JPA, BCrypt, jjwt 0.12.x. Sinh JWT với
+                        claims sub, userId, role, exp.
+
+CSDL                    MySQL user_db.users có cột role và email.
+
+
+                            Kế hoạch triển khai SOA – Đặt vé phim v2.1 | Trang 12
+Sản phẩm chính          ERD, Use Case (Người dùng, Admin), DFD 0/1/2 nhấn mạnh bước so khớp BCrypt,
+                        API, admin (bảng xem user), báo cáo.
+
+
+
+ Lưu ý kỹ thuật riêng
+ Seed phải dùng hash BCrypt tiền tố $2a$ (Phụ lục A), vì jBCrypt bản cũ không đọc được $2b$. Không
+ bao giờ ghi mật khẩu thô ra log. Khóa JWT phải đổi bằng
+ Keys.hmacShaKeyFor(secret.getBytes(StandardCharsets.UTF_8)).
+
+
+TV4 – Booking Service (C#) – Orchestrator
+Vai trò                 Nhận yêu cầu đặt vé, điều phối Payment và Notification. Service nặng nhất ở cuối kỳ.
+
+Giữa kỳ                 HttpListener + ADO.NET (Microsoft.Data.SqlClient hoặc MySqlConnector) +
+                        System.Text.Json. Lưu đơn PENDING, liệt kê đơn, xem chi tiết đơn. Chưa gọi
+                        Payment/Notification.
+
+Cuối kỳ                 ASP.NET Core 8 Minimal API + EF Core. JWT middleware, HttpClientFactory gọi
+                        Showtime (lấy giá), Payment, Notification. Cập nhật PAID/CANCELLED. Xử lý
+                        timeout.
+
+CSDL                    booking_db.bookings. Dùng SQL Server nếu máy Windows; nếu không dùng
+                        MySQL.
+
+Sản phẩm chính          ERD với 3 khóa ngoại logic, Use Case (có actor hệ thống Payment/Notification), DFD
+                        0/1/2, API, admin (bảng đơn kèm nhãn trạng thái), báo cáo.
+
+
+
+ Lưu ý kỹ thuật riêng
+ HttpListener nên dùng prefix http://localhost:5004/ để khỏi cần quyền Administrator. Kiểm tra ghế
+ trùng: không có đơn khác cùng showtime_id và trạng thái khác CANCELLED chứa ghế đó. Khi các bạn
+ khác xong sớm, nên hỗ trợ TV4.
+
+
+TV5 – Payment Service (Node.js)
+Vai trò                 Xử lý thanh toán giả lập, lưu lịch sử giao dịch.
+
+Giữa kỳ                 Module http của Node + driver mongodb. POST /api/payment (amount > 0 và
+                        method hợp lệ → PAID; ngược lại → FAILED, vẫn lưu) và GET /api/payment.
+
+Cuối kỳ                 Express + Mongoose, middleware verify JWT (jsonwebtoken), GET chỉ cho ADMIN.
+
+CSDL                    MongoDB payment_db.transactions. Dùng MongoDB Compass để xem dữ liệu khi
+                        demo.
+
+Sản phẩm chính          Mô hình dữ liệu collection (vẽ như ERD một thực thể), Use Case (actor hệ thống
+                        Booking, Admin), DFD 0/1/2, API, admin, báo cáo.
+
+
+
+ Lưu ý kỹ thuật riêng
+ Với http thuần phải tự đọc body bằng sự kiện data/end và tự JSON.parse trong try/catch. Nhớ xử lý
+ OPTIONS. Lưu bookingId dạng số cho khớp với Booking.
+
+
+
+
+                            Kế hoạch triển khai SOA – Đặt vé phim v2.1 | Trang 13
+TV6 – Notification Service (Go)
+Vai trò                 Nhận yêu cầu từ Booking, giả lập gửi thông báo, ghi nhật ký. Service nhẹ nhất nên
+                        TV6 thêm việc phối hợp chung (ghép admin, gộp báo cáo).
+
+Giữa kỳ                 net/http + encoding/json + database/sql với go-sql-driver/mysql. POST
+                        /api/notify và GET /api/notify/logs.
+
+Cuối kỳ                 Vẫn net/http nhưng cấu trúc lại: package handler, store, middleware kiểm tra X-
+                        Internal-Key, ghi log, tắt server êm (graceful shutdown), có kiểm thử. Dùng cú pháp
+                        mux.HandleFunc("POST /api/notify", …) của Go 1.22.
+
+CSDL                    MySQL notification_db.notification_logs (đề xuất). Nếu thầy không đồng ý,
+                        chuyển về stateless và thay ERD bằng mô hình dữ liệu của request.
+
+Sản phẩm chính          ERD 1 bảng, Use Case (Booking, Admin), DFD 0/1/2, API, admin (bảng nhật ký), báo
+                        cáo.
+
+
+
+ Lưu ý kỹ thuật riêng
+ Bản mẫu v2.0 bỏ qua lỗi khi giải mã JSON. Phải kiểm tra lỗi từ
+ json.NewDecoder(r.Body).Decode(...) và trả 400. Chỉ chấp nhận method POST cho /api/notify
+ (còn lại trả 405).
+
+
+
+
+                            Kế hoạch triển khai SOA – Đặt vé phim v2.1 | Trang 14
+Chương 7. Trang Admin và giao diện người dùng
+7.1. Admin Dashboard (cổng 8081)
+  • Một trang HTML duy nhất, mỗi service là một tab: Phim, Suất chiếu, Người dùng, Đơn đặt
+    vé, Thanh toán, Thông báo.
+  • Giữa kỳ: mỗi người làm sẵn file admin_<service>.html độc lập (HTML + CSS + JS thuần).
+    Sau đó TV6 ghép thành các tab.
+  • Phân loại: Phim và Suất chiếu có đủ thêm/sửa/xóa. Người dùng, Đơn, Thanh toán, Thông
+    báo chỉ xem.
+  • Cuối kỳ: thêm màn hình đăng nhập admin (gọi :5003/api/login), lưu token trong bộ nhớ
+    trang và gửi kèm mọi request cần quyền.
+  • Hiển thị thông báo thân thiện khi service chưa chạy (không để trang trắng).
+
+7.2. Client App (cổng 8080)
+  • Trang đặt vé cho người dùng: đăng nhập → xem phim → chọn suất → chọn ghế → đặt vé →
+    xem kết quả.
+  • Client chỉ gọi bốn cụm: Movie, Showtime, User, Booking. Client không gọi trực tiếp Payment
+    hay Notification vì Booking điều phối việc đó.
+  • Thực hiện ở cuối kỳ. Giữa kỳ thầy không yêu cầu giao diện người dùng.
+
+7.3. Cách chạy nhanh
+Thành phần            Lệnh chạy (giữa kỳ)                          Lệnh chạy (cuối kỳ)
+
+Movie (Python)        python movie_service.py                      python manage.py runserver
+                                                                   0.0.0.0:5001
+
+Showtime (PHP)        php -S 0.0.0.0:5002 router.php               php spark serve --host 0.0.0.0 --
+                                                                   port 5002
+
+User (Java)           Chạy lớp Main (IDE hoặc java)                mvn spring-boot:run
+
+Booking (C#)          dotnet run                                   dotnet run
+
+Payment (Node)        node payment_service.js                      node app.js
+
+Notification (Go)     go run .                                     go run ./cmd/notification
+
+Client / Admin        python -m http.server 8080 / 8081            như giữa kỳ
+
+
+
+
+                          Kế hoạch triển khai SOA – Đặt vé phim v2.1 | Trang 15
+Chương 8. Lộ trình thực hiện
+Giai đoạn           Thời gian                 Kết quả cần đạt                                 Phụ trách
+
+GĐ1. Chuẩn bị       Từ 02/10 đến Chủ          Mỗi người nộp: DB + seed, ERD, Use Case,        Từng thành viên
+giữa kỳ             nhật 04/10/2026           DFD 0/1/2, API code thuần chạy được, file
+                                              admin, báo cáo chức năng.
+
+GĐ1b. Ghép          05/10 – 06/10             ERD tổng thể, Use Case/DFD tổng, ghép           TV3, TV4, TV6
+chung                                         admin thành tab, báo cáo tổng quan, tập trình   (xem Phiếu giao
+                                              bày.                                            việc)
+
+Kiểm tra tiến độ    Buổi học tuần 05/10 –     Trình bày dữ liệu trước, sau đó từng người      Cả nhóm
+                    11/10 (ngày cụ thể        trình bày service, cuối cùng chạy admin.
+                    chờ thầy)                 Không đạt bị trừ 2 điểm giữa kỳ.
+
+GĐ2. Giữa kỳ        Theo lịch thầy thông      Hoàn thiện toàn bộ bản code thuần: CRUD         Từng thành viên
+                    báo                       đủ, dữ liệu mẫu thống nhất, admin chạy trên
+                                              cả 6 service.
+
+GĐ3. Cuối kỳ        Theo lịch thầy thông      Chuyển sang framework, thêm JWT, Booking        Từng thành
+                    báo                       điều phối Payment → Notification, làm Client    viên; cả nhóm
+                                              App, kiểm thử toàn hệ thống.                    hỗ trợ TV4
+
+
+
+Rủi ro chính và cách xử lý
+Rủi ro                                     Cách xử lý
+
+Một người chậm làm kéo cả nhóm bị trừ      Nhóm trưởng kiểm tra nhanh vào tối Thứ Bảy 03/10. Ai vướng thì
+điểm                                       báo sớm để được hỗ trợ.
+
+Id dữ liệu giữa các service không khớp     Mọi người dùng đúng dữ liệu mẫu ở Phụ lục A.
+
+Khác môi trường (Windows/macOS)            TV4 chuyển sang MySQL nếu không có SQL Server.
+làm C# không chạy
+
+Lỗi JWT lệch giữa Java và C#/Node          Thống nhất quy ước chương 5 và kiểm tra bằng jwt.io trước khi
+                                           ghép.
+
+Thầy không đồng ý Notification có          Chuyển sang stateless, thay ERD bằng mô hình dữ liệu của request.
+CSDL
+
+
+
+
+                             Kế hoạch triển khai SOA – Đặt vé phim v2.1 | Trang 16
+Chương 9. Quy ước làm việc chung
+9.1. Cấu trúc kho mã nguồn
+soa-datve/
+├── docs/                 # sơ đồ& báo cáo (mỗ i người 1 thư mục con)
+│   ├── tv1-movie/ tv2-showtime/ tv3-user/
+│   └── tv4-booking/ tv5-payment/ tv6-notification/
+├── movie-service/        # Python
+├── showtime-service/     # PHP
+├── user-service/         # Java
+├── booking-service/      # C#
+├── payment-service/      # Node.js
+├── notification-service/ # Go
+├── admin/                # ghép từ admin_<service>.html
+├── client/               # giao diện người dùng (cuối kỳ)
+└── seed/                 # dữ liệu mẫu chung (.sql, .js)
+
+
+9.2. Quy ước khác
+  • Git: mỗi người làm trong thư mục của mình; commit thường xuyên; không sửa thư mục
+    người khác khi chưa báo.
+  • Đặt tên file sơ đồ: UC_<service>.png, DFD0_<service>.png, DFD1_<service>.png,
+    DFD2_<service>.png, ERD_<service>.png, kèm file nguồn .drawio.
+  • Công cụ vẽ: draw.io (diagrams.net), xuất PNG và lưu file nguồn.
+  • Ký hiệu DFD: thống nhất Gane–Sarson cho cả nhóm. Tiến trình đánh số 1.0, 2.0…; mức 2
+    đánh số 1.1, 1.2…
+  • Mật khẩu CSDL và khóa: không đưa mật khẩu thật vào repo; dùng file cấu hình mẫu
+    config.example.
+  • Cổng: cố định 5001–5006, Client 8080, Admin 8081.
+  • Họp nhóm: ngắn, tối thiểu mỗi 2 ngày một lần trong tuần nước rút. Ai chặn việc của người
+    khác phải báo ngay.
+
+
+
+
+                         Kế hoạch triển khai SOA – Đặt vé phim v2.1 | Trang 17
+Phụ lục A. Dữ liệu mẫu dùng chung
+Tất cả thành viên phải nạp đúng dữ liệu này để id khớp nhau. Có thể thêm bản ghi, nhưng không
+đổi id hay giá trị của các dòng dưới đây.
+
+A.1. movies (Movie Service)
+ id         title                                    genre                            duration       poster
+
+ 1          Avengers: Endgame                        Hành động                        181            poster1.jpg
+
+ 2          Inception                                Khoa học viễn tưởng              148            poster2.jpg
+
+ 3          Parasite                                 Tâm lý                           132            poster3.jpg
+
+ 4          Mai                                      Tâm lý                           131            poster4.jpg
+
+ 5          Coco                                     Hoạt hình                        105            poster5.jpg
+
+
+A.2. showtimes (Showtime Service)
+ id     movie_id           cinema                                room    time                          price
+
+ 1      1                  CGV Vincom Đồng Khởi                  P1      2026-10-10 18:00              90000
+
+ 2      1                  CGV Vincom Đồng Khởi                  P2      2026-10-10 21:00              100000
+
+ 3      2                  Lotte Cinema Cantavil                 P1      2026-10-11 19:30              85000
+
+ 4      3                  BHD Star Bitexco                      P3      2026-10-11 20:00              80000
+
+ 5      4                  CGV Vincom Đồng Khởi                  P3      2026-10-12 17:30              90000
+
+ 6      5                  Lotte Cinema Cantavil                 P2      2026-10-12 15:00              75000
+
+
+A.3. users (User Service)
+ id     username                 mật khẩu (thô)          email                                       role
+
+ 1      admin                    Admin@123               admin@cinema.local                          ADMIN
+
+ 2      user1                    User@123                user1@cinema.local                          USER
+
+ 3      user2                    User@123                user2@cinema.local                          USER
+
+
+Giá trị password_hash (BCrypt, cost 10, tiền tố $2a$, đã kiểm tra khớp mật khẩu):
+ Admin@123 → $2a$10$E8cofqiolfZk1ihu2plZM.UJfIuTvkB54LjgTxFBmeJwpY59Z/yju
+ User@123 → $2a$10$ItvF/UzunDkYLpvNquq4iOP9vu4Z/gL0eoX3.FBvC1UaNSa2ugQ6O
+
+A.4. bookings (Booking Service)
+ id    movie_i         showtime_i      username       seats             total_price         status
+       d               d
+
+ 1     1               1               user1          A1,A2             180000              PAID
+
+ 2     2               3               user2          B5                85000               CANCELLED
+
+ 3     4               5               user1          C3,C4             180000              PENDING
+
+
+
+
+                                    Kế hoạch triển khai SOA – Đặt vé phim v2.1 | Trang 18
+A.5. transactions (Payment Service) và notification_logs (Notification Service)
+bookingId          amount                        method                            status
+
+1                  180000                        MOMO                              PAID
+
+2                  85000                         VNPAY                             FAILED
+
+
+booking_id      username             channel              message
+
+1               user1                EMAIL                Đặt vé thành công cho đơn #1
+
+
+
+
+                           Kế hoạch triển khai SOA – Đặt vé phim v2.1 | Trang 19
+Phụ lục B. Những chỗ cần sửa nếu dùng code mẫu của v2.0
+Thành phần       Chỗ cần sửa
+
+Python (Flask)   Không dùng Flask nữa. Giữa kỳ viết bằng http.server; cuối kỳ làm lại bằng Django.
+
+PHP              Đổi tên file thành router.php và đường dẫn /api/showtimes. Cuối kỳ làm lại bằng
+                 CodeIgniter 4.
+
+Java             Sửa tạo khóa JWT (chương 5). Thêm cột role vào bảng và vào claims. Thêm
+                 GET /api/users.
+
+C#               Thay Minimal API bằng HttpListener ở giữa kỳ. Chuỗi kết nối Trusted_Connection
+                 chỉ chạy trên Windows. Lấy username từ JWT thay vì body.
+
+Node.js          Bổ sung nhánh FAILED. Thêm GET /api/payment cho admin.
+
+Go               Kiểm tra lỗi khi giải mã JSON; chỉ nhận POST; thêm kiểm tra X-Internal-Key; ghi
+                 log vào CSDL.
+
+Mọi service      Thêm xử lý OPTIONS; dùng prepared statement; chuẩn hóa JSON {status, data}.
+
+
+
+
+                     Kế hoạch triển khai SOA – Đặt vé phim v2.1 | Trang 20
+Phụ lục C. Điểm cần xác nhận với thầy
+#   Nội dung                Mình đã giả định                           Cần xác nhận
+
+1   Phiên bản Java          Spring Boot 3.x (bản ổn định gần nhất).    Kiểm tra lại phiên bản: số 3.7 có thể là ghi
+                            Thầy ghi “3.7”.                            nhầm. Hỏi thầy hoặc dùng bản mới nhất của
+                                                                       dòng 3.x với Java 17+.
+
+2   PHP                     Dùng CodeIgniter 4 thay Laravel (mũi tên   Xác nhận không còn dùng Laravel.
+                            “→ CodeIgniter 4.0” trong tin nhắn).
+
+3   Node.js                 “NodeJS + Core”: giữa kỳ dùng module       Xác nhận có được dùng Express làm
+                            http; cuối kỳ dùng Express.                framework.
+
+4   Thư viện trong “core”   Được dùng driver CSDL và thư viện          Xác nhận mức độ cho phép.
+                            JSON/BCrypt nhỏ; không dùng
+                            framework web.
+
+5   Notification có CSDL    Có bảng notification_logs để có            Xác nhận chấp nhận, hoặc chuyển sang
+                            ERD.                                       stateless.
+
+6   Ngày kiểm tra và        Kiểm tra tiến độ trong tuần 05/10 –        Cập nhật ngày chính xác khi thầy thông báo.
+    ngày giữa/cuối kỳ       11/10/2026.
+
+7   Giữa kỳ có cần          Không, chỉ cần dữ liệu, API và admin.      Xác nhận khi thầy hướng dẫn thêm.
+    Client App không
+
+
+
+
+                              Kế hoạch triển khai SOA – Đặt vé phim v2.1 | Trang 21
+
