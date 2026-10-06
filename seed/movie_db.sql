@@ -21,5 +21,5 @@ INSERT INTO movies (id, title, genre, duration, poster) VALUES
 -- Bảng movies sử dụng schema từ movie_schema.sql và seed từ movie_seed.sql.
 -- Cần đảm bảo file movie_schema.sql được thực thi trước để tránh lỗi thiếu cột 'created_at'.
 
-SOURCE movie_schema.sql;
-SOURCE movie_seed.sql;
+SOURCE seed/movie_schema.sql;
+SOURCE seed/movie_seed.sql;
