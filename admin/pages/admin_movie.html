@@ -1,0 +1,699 @@
+<!DOCTYPE html>
+<html lang="vi">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Admin - Movie Service Management</title>
+  <style>
+    :root {
+      --bg: #0f172a;
+      --card-bg: rgba(30, 41, 59, 0.85);
+      --card-border: rgba(255, 255, 255, 0.1);
+      --primary: #3b82f6;
+      --primary-hover: #2563eb;
+      --success: #10b981;
+      --danger: #ef4444;
+      --warning: #f59e0b;
+      --text: #f8fafc;
+      --text-muted: #94a3b8;
+      --table-stripe: rgba(255, 255, 255, 0.02);
+      --table-hover: rgba(255, 255, 255, 0.05);
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+    }
+
+    body {
+      background-color: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      padding: 30px 20px;
+      line-height: 1.5;
+    }
+
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+
+    /* Header */
+    .header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 25px;
+      padding-bottom: 20px;
+      border-bottom: 1px solid var(--card-border);
+      flex-wrap: wrap;
+      gap: 15px;
+    }
+
+    .title-area h1 {
+      font-size: 1.8rem;
+      font-weight: 700;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      background: linear-gradient(135deg, #60a5fa, #a855f7);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+
+    .title-area p {
+      color: var(--text-muted);
+      font-size: 0.95rem;
+      margin-top: 4px;
+    }
+
+    .badge-port {
+      background: rgba(59, 130, 246, 0.2);
+      color: #93c5fd;
+      padding: 4px 10px;
+      border-radius: 9999px;
+      font-size: 0.85rem;
+      border: 1px solid rgba(59, 130, 246, 0.3);
+      font-family: monospace;
+    }
+
+    .actions {
+      display: flex;
+      gap: 12px;
+    }
+
+    /* Buttons */
+    .btn {
+      padding: 10px 18px;
+      border-radius: 8px;
+      font-weight: 600;
+      font-size: 0.9rem;
+      cursor: pointer;
+      border: none;
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      transition: all 0.2s ease;
+      text-decoration: none;
+    }
+
+    .btn-primary {
+      background: var(--primary);
+      color: #fff;
+      box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+    }
+
+    .btn-primary:hover {
+      background: var(--primary-hover);
+      transform: translateY(-1px);
+    }
+
+    .btn-outline {
+      background: transparent;
+      color: var(--text);
+      border: 1px solid var(--card-border);
+    }
+
+    .btn-outline:hover {
+      background: rgba(255, 255, 255, 0.05);
+      border-color: rgba(255, 255, 255, 0.2);
+    }
+
+    .btn-danger {
+      background: rgba(239, 68, 68, 0.2);
+      color: #fca5a5;
+      border: 1px solid rgba(239, 68, 68, 0.3);
+    }
+
+    .btn-danger:hover {
+      background: var(--danger);
+      color: #fff;
+    }
+
+    .btn-edit {
+      background: rgba(245, 158, 11, 0.2);
+      color: #fde68a;
+      border: 1px solid rgba(245, 158, 11, 0.3);
+    }
+
+    .btn-edit:hover {
+      background: var(--warning);
+      color: #000;
+    }
+
+    .btn-sm {
+      padding: 6px 12px;
+      font-size: 0.8rem;
+    }
+
+    /* Alert / Error Box */
+    .alert {
+      padding: 16px 20px;
+      border-radius: 10px;
+      margin-bottom: 25px;
+      display: none;
+      align-items: center;
+      gap: 12px;
+      font-size: 0.95rem;
+    }
+
+    .alert-danger {
+      background: rgba(239, 68, 68, 0.15);
+      border: 1px solid rgba(239, 68, 68, 0.3);
+      color: #fca5a5;
+    }
+
+    .alert-success {
+      background: rgba(16, 185, 129, 0.15);
+      border: 1px solid rgba(16, 185, 129, 0.3);
+      color: #6ee7b7;
+    }
+
+    /* Modal Form */
+    .modal-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.7);
+      backdrop-filter: blur(4px);
+      display: none;
+      justify-content: center;
+      align-items: center;
+      z-index: 1000;
+      padding: 20px;
+    }
+
+    .modal-card {
+      background: #1e293b;
+      border: 1px solid var(--card-border);
+      border-radius: 14px;
+      width: 100%;
+      max-width: 500px;
+      box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5);
+      overflow: hidden;
+      animation: modalFadeIn 0.2s ease-out;
+    }
+
+    @keyframes modalFadeIn {
+      from {
+        opacity: 0;
+        transform: scale(0.95);
+      }
+
+      to {
+        opacity: 1;
+        transform: scale(1);
+      }
+    }
+
+    .modal-header {
+      padding: 18px 24px;
+      border-bottom: 1px solid var(--card-border);
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+
+    .modal-header h3 {
+      font-size: 1.2rem;
+      font-weight: 600;
+    }
+
+    .modal-close {
+      background: none;
+      border: none;
+      color: var(--text-muted);
+      font-size: 1.5rem;
+      cursor: pointer;
+    }
+
+    .modal-body {
+      padding: 24px;
+    }
+
+    .form-group {
+      margin-bottom: 18px;
+    }
+
+    .form-group label {
+      display: block;
+      font-size: 0.85rem;
+      font-weight: 600;
+      margin-bottom: 6px;
+      color: var(--text-muted);
+    }
+
+    .form-group input {
+      width: 100%;
+      padding: 10px 14px;
+      border-radius: 8px;
+      border: 1px solid var(--card-border);
+      background: rgba(15, 23, 42, 0.6);
+      color: #fff;
+      font-size: 0.95rem;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+
+    .form-group input:focus {
+      border-color: var(--primary);
+      box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.2);
+    }
+
+    .modal-footer {
+      padding: 16px 24px;
+      background: rgba(15, 23, 42, 0.4);
+      border-top: 1px solid var(--card-border);
+      display: flex;
+      justify-content: flex-end;
+      gap: 12px;
+    }
+
+    /* Table Container */
+    .card {
+      background: var(--card-bg);
+      border: 1px solid var(--card-border);
+      border-radius: 12px;
+      overflow: hidden;
+      box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.3);
+    }
+
+    .table-responsive {
+      overflow-x: auto;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      text-align: left;
+    }
+
+    th {
+      background: rgba(15, 23, 42, 0.8);
+      padding: 14px 18px;
+      font-size: 0.85rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: var(--text-muted);
+      border-bottom: 1px solid var(--card-border);
+    }
+
+    td {
+      padding: 14px 18px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+      font-size: 0.95rem;
+    }
+
+    tr:nth-child(even) {
+      background-color: var(--table-stripe);
+    }
+
+    tr:hover {
+      background-color: var(--table-hover);
+    }
+
+    .tag-genre {
+      background: rgba(168, 85, 247, 0.15);
+      color: #c084fc;
+      border: 1px solid rgba(168, 85, 247, 0.3);
+      padding: 3px 8px;
+      border-radius: 6px;
+      font-size: 0.8rem;
+    }
+
+    .poster-cell {
+      display: flex;
+      align-items: center;
+      gap: 10px;
+    }
+
+    .poster-badge {
+      font-family: monospace;
+      font-size: 0.8rem;
+      color: #38bdf8;
+      background: rgba(56, 189, 248, 0.1);
+      padding: 3px 6px;
+      border-radius: 4px;
+    }
+
+    .empty-state {
+      padding: 60px 20px;
+      text-align: center;
+      color: var(--text-muted);
+    }
+
+    .empty-state svg {
+      width: 48px;
+      height: 48px;
+      margin-bottom: 12px;
+      stroke: var(--text-muted);
+    }
+
+    /* Toast Notification */
+    .toast {
+      position: fixed;
+      bottom: 24px;
+      right: 24px;
+      background: #1e293b;
+      border: 1px solid var(--card-border);
+      color: #fff;
+      padding: 12px 20px;
+      border-radius: 8px;
+      box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.5);
+      display: none;
+      z-index: 2000;
+      animation: toastIn 0.3s ease;
+    }
+
+    @keyframes toastIn {
+      from {
+        transform: translateY(20px);
+        opacity: 0;
+      }
+
+      to {
+        transform: translateY(0);
+        opacity: 1;
+      }
+    }
+  </style>
+</head>
+
+<body>
+  <div class="container">
+    <!-- Header -->
+    <div class="header">
+      <div class="title-area">
+        <h1>
+          <span>🎬</span> Quản lý Phim (Movie Service)
+          <span class="badge-port">:5001</span>
+        </h1>
+        <p>Giao diện quản trị thành viên TV1 (Python Core HTTP Server) - Đồ án Microservices SOA</p>
+      </div>
+      <div class="actions">
+        <button id="btnReload" class="btn btn-outline" onclick="loadMovies()">
+          🔄 Tải lại
+        </button>
+        <button id="btnOpenCreate" class="btn btn-primary" onclick="openCreateModal()">
+          ➕ Thêm phim mới
+        </button>
+      </div>
+    </div>
+
+    <!-- Alert / Service Status Banner -->
+    <div id="serviceAlert" class="alert alert-danger">
+      <span>⚠️</span>
+      <div id="serviceAlertMsg">
+        <strong>Lỗi kết nối:</strong> Không thể kết nối tới Movie Service tại cổng 5001. Vui lòng kiểm tra lệnh
+        <code>python movie_service.py</code> đã được khởi động chưa.
+      </div>
+    </div>
+
+    <!-- Table Card -->
+    <div class="card">
+      <div class="table-responsive">
+        <table id="movieTable">
+          <thead>
+            <tr>
+              <th style="width: 70px;">ID</th>
+              <th>Tên phim</th>
+              <th>Thể loại</th>
+              <th>Thời lượng</th>
+              <th>Poster</th>
+              <th style="text-align: right; width: 170px;">Thao tác</th>
+            </tr>
+          </thead>
+          <tbody id="movieTbody">
+            <tr>
+              <td colspan="6" class="empty-state">Đang nạp danh sách phim...</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal Thêm / Sửa Phim -->
+  <div id="movieModal" class="modal-overlay">
+    <div class="modal-card">
+      <div class="modal-header">
+        <h3 id="modalTitle">Thêm phim mới</h3>
+        <button class="modal-close" onclick="closeModal()">&times;</button>
+      </div>
+      <div class="modal-body">
+        <input type="hidden" id="formMovieId">
+        <div class="form-group">
+          <label for="formTitle">Tên phim <span style="color: var(--danger)">*</span></label>
+          <input type="text" id="formTitle" placeholder="Ví dụ: Avengers: Endgame" required>
+        </div>
+        <div class="form-group">
+          <label for="formGenre">Thể loại</label>
+          <input type="text" id="formGenre" placeholder="Ví dụ: Hành động, Viễn tưởng">
+        </div>
+        <div class="form-group">
+          <label for="formDuration">Thời lượng (phút) <span style="color: var(--danger)">*</span></label>
+          <input type="number" id="formDuration" placeholder="Ví dụ: 120" min="1" required>
+        </div>
+        <div class="form-group">
+          <label for="formPoster">File Poster</label>
+          <input type="text" id="formPoster" placeholder="Ví dụ: poster1.jpg">
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-outline" onclick="closeModal()">Hủy</button>
+        <button class="btn btn-primary" onclick="saveMovie()">Lưu phim</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Toast Alert -->
+  <div id="toast" class="toast"></div>
+
+  <script>
+    // =========================================================================
+    // HẰNG SỐ CỐ ĐỊNH THEO QUY ƯỚC CỦA DỰ ÁN SOA
+    // Dễ dàng ghép nối vào Admin Dashboard chung (Cổng 8081)
+    // =========================================================================
+    const API_BASE = "http://localhost:5001";
+
+    // Khởi chạy khi tài liệu tải xong
+    document.addEventListener("DOMContentLoaded", () => {
+      loadMovies();
+    });
+
+    // Thông báo Toast nhanh
+    function showToast(message, isError = false) {
+      const toast = document.getElementById("toast");
+      toast.textContent = message;
+      toast.style.borderColor = isError ? "var(--danger)" : "var(--success)";
+      toast.style.display = "block";
+      setTimeout(() => {
+        toast.style.display = "none";
+      }, 3500);
+    }
+
+    // Hiển thị / Ẩn Service Alert lỗi kết nối
+    function setAlert(show, message = "") {
+      const alertBox = document.getElementById("serviceAlert");
+      const alertMsg = document.getElementById("serviceAlertMsg");
+      if (show) {
+        alertMsg.innerHTML = message;
+        alertBox.style.display = "flex";
+      } else {
+        alertBox.style.display = "none";
+      }
+    }
+
+    // LẤY DANH SÁCH PHIM (GET /api/movies)
+    async function loadMovies() {
+      const tbody = document.getElementById("movieTbody");
+      try {
+        const response = await fetch(`${API_BASE}/api/movies`, {
+          method: "GET",
+          headers: { "Content-Type": "application/json" }
+        });
+
+        if (!response.ok) {
+          throw new Error(`HTTP Error ${response.status}`);
+        }
+
+        const resData = await response.json();
+        setAlert(false);
+
+        const movies = resData.data || [];
+        if (movies.length === 0) {
+          tbody.innerHTML = `
+            <tr>
+              <td colspan="6" class="empty-state">
+                <div>Chưa có dữ liệu phim nào. Hãy nhấn "Thêm phim mới".</div>
+              </td>
+            </tr>
+          `;
+          return;
+        }
+
+        tbody.innerHTML = movies.map(m => `
+          <tr>
+            <td><strong>#${m.id}</strong></td>
+            <td><strong>${escapeHtml(m.title)}</strong></td>
+            <td><span class="tag-genre">${escapeHtml(m.genre || 'Chưa phân loại')}</span></td>
+            <td>${m.duration ? m.duration + ' phút' : 'N/A'}</td>
+            <td>
+              <div class="poster-cell">
+                <span class="poster-badge">${escapeHtml(m.poster || 'no-poster.jpg')}</span>
+              </div>
+            </td>
+            <td style="text-align: right;">
+              <button class="btn btn-edit btn-sm" onclick="openEditModal(${m.id})">✏️ Sửa</button>
+              <button class="btn btn-danger btn-sm" onclick="confirmDeleteMovie(${m.id}, '${escapeHtml(m.title)}')">🗑️ Xóa</button>
+            </td>
+          </tr>
+        `).join("");
+
+      } catch (err) {
+        console.error("Lỗi khi kết nối Movie Service:", err);
+        setAlert(true, `<strong>Lỗi kết nối Movie Service:</strong> Không thể gọi API tại <code>${API_BASE}/api/movies</code>. Vui lòng đảm bảo server <code>python movie_service.py</code> đang chạy!`);
+        tbody.innerHTML = `
+          <tr>
+            <td colspan="6" class="empty-state" style="color: var(--danger)">
+              Không lấy được dữ liệu từ Movie Service (${API_BASE}).
+            </td>
+          </tr>
+        `;
+      }
+    }
+
+    // Mở modal thêm mới
+    function openCreateModal() {
+      document.getElementById("modalTitle").textContent = "Thêm phim mới";
+      document.getElementById("formMovieId").value = "";
+      document.getElementById("formTitle").value = "";
+      document.getElementById("formGenre").value = "";
+      document.getElementById("formDuration").value = "";
+      document.getElementById("formPoster").value = "";
+      document.getElementById("movieModal").style.display = "flex";
+      document.getElementById("formTitle").focus();
+    }
+
+    // Mở modal sửa phim
+    async function openEditModal(id) {
+      try {
+        const response = await fetch(`${API_BASE}/api/movies/${id}`);
+        const resData = await response.json();
+        if (resData.status === "success" && resData.data) {
+          const m = resData.data;
+          document.getElementById("modalTitle").textContent = `Chỉnh sửa phim #${m.id}`;
+          document.getElementById("formMovieId").value = m.id;
+          document.getElementById("formTitle").value = m.title || "";
+          document.getElementById("formGenre").value = m.genre || "";
+          document.getElementById("formDuration").value = m.duration || "";
+          document.getElementById("formPoster").value = m.poster || "";
+          document.getElementById("movieModal").style.display = "flex";
+        } else {
+          showToast(resData.message || "Không tìm thấy phim", true);
+        }
+      } catch (err) {
+        showToast("Lỗi khi lấy thông tin chi tiết phim", true);
+      }
+    }
+
+    // Đóng Modal
+    function closeModal() {
+      document.getElementById("movieModal").style.display = "none";
+    }
+
+    // LƯU PHIM (POST hoặc PUT)
+    async function saveMovie() {
+      const id = document.getElementById("formMovieId").value;
+      const title = document.getElementById("formTitle").value.trim();
+      const genre = document.getElementById("formGenre").value.trim();
+      const durationVal = document.getElementById("formDuration").value;
+      const poster = document.getElementById("formPoster").value.trim();
+
+      if (!title) {
+        alert("Vui lòng nhập tên phim!");
+        return;
+      }
+
+      if (!durationVal || parseInt(durationVal) <= 0) {
+        alert("Vui lòng nhập thời lượng phim hợp lệ (lớn hơn 0 phút)!");
+        return;
+      }
+
+      const payload = {
+        title: title,
+        genre: genre,
+        duration: parseInt(durationVal),
+        poster: poster
+      };
+
+      try {
+        let response;
+        if (id) {
+          // PUT /api/movies/{id}
+          response = await fetch(`${API_BASE}/api/movies/${id}`, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload)
+          });
+        } else {
+          // POST /api/movies
+          response = await fetch(`${API_BASE}/api/movies`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload)
+          });
+        }
+
+        const res = await response.json();
+        if (response.ok && res.status === "success") {
+          showToast(id ? "Cập nhật phim thành công!" : "Thêm phim mới thành công!");
+          closeModal();
+          loadMovies();
+        } else {
+          alert("Lỗi: " + (res.message || "Không thể lưu dữ liệu"));
+        }
+      } catch (err) {
+        alert("Lỗi kết nối máy chủ khi lưu phim: " + err.message);
+      }
+    }
+
+    // XÓA PHIM (DELETE /api/movies/{id})
+    async function confirmDeleteMovie(id, title) {
+      if (!confirm(`Bạn có chắc chắn muốn xóa bộ phim "${title}" (ID: ${id})?`)) {
+        return;
+      }
+
+      try {
+        const response = await fetch(`${API_BASE}/api/movies/${id}`, {
+          method: "DELETE",
+          headers: { "Content-Type": "application/json" }
+        });
+        const res = await response.json();
+        if (response.ok && res.status === "success") {
+          showToast(`Đã xóa phim #${id} thành công!`);
+          loadMovies();
+        } else {
+          alert("Lỗi xóa phim: " + (res.message || "Thất bại"));
+        }
+      } catch (err) {
+        alert("Lỗi kết nối khi xóa phim: " + err.message);
+      }
+    }
+
+    // Hàm an toàn chống XSS
+    function escapeHtml(str) {
+      if (!str) return '';
+      return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#039;');
+    }
+  </script>
+</body>
+
+</html>
