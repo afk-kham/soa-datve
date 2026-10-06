@@ -1,0 +1,161 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Admin - User Service</title>
+<style>
+  :root { --bg:#f4f6fa; --card:#fff; --text:#1f2937; --muted:#6b7280; --line:#e5e7eb; --brand:#2563eb; --err:#b91c1c; --errbg:#fee2e2; }
+  * { box-sizing: border-box; }
+  body { margin:0; font-family: "Segoe UI", Roboto, Arial, sans-serif; background:var(--bg); color:var(--text); }
+  .wrap { max-width: 960px; margin: 28px auto; padding: 0 16px; }
+  h1 { font-size: 22px; margin: 0 0 4px; }
+  .sub { color:var(--muted); font-size: 13px; margin-bottom: 14px; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:16px; margin-bottom:14px; }
+  .stats { display:grid; grid-template-columns: repeat(3, 1fr); gap:12px; margin-bottom:14px; }
+  .stat { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:12px 16px; }
+  .stat b { display:block; font-size:26px; } .stat span { color:var(--muted); font-size:13px; }
+  .bar { display:flex; gap:8px; flex-wrap:wrap; margin-bottom:10px; align-items:center; }
+  input, select, button { font: inherit; padding: 8px 10px; border:1px solid var(--line); border-radius:6px; background:#fff; }
+  input[type=text] { flex:1; min-width:180px; }
+  button { background:var(--brand); color:#fff; border-color:var(--brand); cursor:pointer; }
+  button:hover { filter: brightness(.93); }
+  .cols { font-size:13px; color:var(--muted); margin-bottom:10px; }
+  .cols label { margin-right:12px; cursor:pointer; }
+  table { width:100%; border-collapse: collapse; font-size: 14px; }
+  th, td { text-align:left; padding: 9px 10px; border-bottom:1px solid var(--line); }
+  th { background:#f9fafb; font-weight:600; cursor:pointer; user-select:none; white-space:nowrap; }
+  th:hover { background:#eef2ff; }
+  tbody tr { cursor:pointer; } tbody tr:hover { background:#f5f8ff; }
+  .badge { padding:2px 9px; border-radius:99px; font-size:12px; font-weight:600; }
+  .ADMIN { background:#fee2e2; color:#991b1b; } .USER { background:#dbeafe; color:#1e40af; }
+  .msg { padding:10px 12px; border-radius:6px; margin-bottom:12px; font-size:14px; display:none; }
+  .msg.err { display:block; background:var(--errbg); color:var(--err); }
+  .count { color:var(--muted); font-size:13px; margin-top:10px; }
+  #detail { display:none; border-left:4px solid var(--brand); }
+  #detail dl { display:grid; grid-template-columns:110px 1fr; gap:6px 12px; margin:8px 0 0; font-size:14px; }
+  #detail dt { color:var(--muted); } #detail dd { margin:0; }
+  #detail h2 { font-size:16px; margin:0; display:flex; justify-content:space-between; }
+  #detail h2 button { background:#fff; color:var(--text); border-color:var(--line); padding:2px 10px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Quản trị người dùng</h1>
+  <div class="sub">User/Auth Service · <span id="base"></span> · chỉ xem (không hiển thị mật khẩu hay hash)</div>
+
+  <div class="stats">
+    <div class="stat"><b id="sTotal">–</b><span>Tổng người dùng</span></div>
+    <div class="stat"><b id="sAdmin">–</b><span>Quản trị viên (ADMIN)</span></div>
+    <div class="stat"><b id="sUser">–</b><span>Người dùng thường (USER)</span></div>
+  </div>
+
+  <div class="card">
+    <div id="msg" class="msg"></div>
+    <div class="bar">
+      <input type="text" id="q" placeholder="Lọc theo username hoặc email…" oninput="render()">
+      <select id="role" onchange="render()">
+        <option value="">Tất cả vai trò</option><option>ADMIN</option><option>USER</option>
+      </select>
+      <button onclick="load()">Tải lại</button>
+    </div>
+    <div class="cols">Hiện cột:
+      <label><input type="checkbox" data-col="id" checked onchange="render()"> ID</label>
+      <label><input type="checkbox" data-col="username" checked onchange="render()"> Username</label>
+      <label><input type="checkbox" data-col="email" checked onchange="render()"> Email</label>
+      <label><input type="checkbox" data-col="role" checked onchange="render()"> Role</label>
+      · Bấm tiêu đề cột để sắp xếp, bấm một dòng để xem chi tiết.
+    </div>
+    <table>
+      <thead id="head"></thead>
+      <tbody id="rows"><tr><td>Đang tải…</td></tr></tbody>
+    </table>
+    <div id="count" class="count"></div>
+  </div>
+
+  <div id="detail" class="card">
+    <h2><span>Chi tiết người dùng</span><button onclick="closeDetail()">Đóng</button></h2>
+    <dl id="detailBody"></dl>
+  </div>
+</div>
+
+<script>
+const API_BASE = "http://localhost:5003";   // đổi khi ghép với máy khác
+
+const COLS = [["id","ID"],["username","Username"],["email","Email"],["role","Role"]];
+let users = [], sortKey = "id", sortDir = 1;
+document.getElementById("base").textContent = API_BASE;
+
+function esc(s) { const d = document.createElement("div"); d.textContent = s ?? ""; return d.innerHTML; }
+function cell(u, k) { return k === "role" ? `<span class="badge ${esc(u.role)}">${esc(u.role)}</span>` : esc(u[k]); }
+function visibleCols() {
+  const on = [...document.querySelectorAll("[data-col]")].filter(c => c.checked).map(c => c.dataset.col);
+  return COLS.filter(([k]) => on.includes(k));
+}
+function showError(text) {
+  const m = document.getElementById("msg");
+  m.className = text ? "msg err" : "msg";
+  m.textContent = text || "";
+}
+
+async function callApi(path) {
+  const res = await fetch(API_BASE + path);
+  const json = await res.json();
+  if (!res.ok || json.status !== "success") throw new Error(json.message || ("HTTP " + res.status));
+  return json.data;
+}
+
+async function load() {
+  showError("");
+  document.getElementById("rows").innerHTML = "<tr><td>Đang tải…</td></tr>";
+  try {
+    users = await callApi("/api/users");
+    render();
+  } catch (e) {
+    users = [];
+    document.getElementById("rows").innerHTML = "<tr><td>Không có dữ liệu</td></tr>";
+    document.getElementById("count").textContent = "";
+    for (const id of ["sTotal","sAdmin","sUser"]) document.getElementById(id).textContent = "–";
+    showError("Không kết nối được User Service tại " + API_BASE + ". Hãy kiểm tra service đã chạy (cổng 5003) và CSDL user_db. Chi tiết: " + e.message);
+  }
+}
+
+function sortBy(k) { if (sortKey === k) sortDir = -sortDir; else { sortKey = k; sortDir = 1; } render(); }
+
+function render() {
+  const q = document.getElementById("q").value.trim().toLowerCase();
+  const role = document.getElementById("role").value;
+  const cols = visibleCols();
+  let list = users.filter(u =>
+    (!role || u.role === role) &&
+    (!q || (u.username || "").toLowerCase().includes(q) || (u.email || "").toLowerCase().includes(q)));
+  list.sort((a, b) => {
+    const x = a[sortKey] ?? "", y = b[sortKey] ?? "";
+    return (typeof x === "number" ? x - y : String(x).localeCompare(String(y), "vi")) * sortDir;
+  });
+  document.getElementById("head").innerHTML = "<tr>" + cols.map(([k, n]) =>
+    `<th onclick="sortBy('${k}')">${n}${sortKey === k ? (sortDir > 0 ? " ▲" : " ▼") : ""}</th>`).join("") + "</tr>";
+  document.getElementById("rows").innerHTML = list.length
+    ? list.map(u => `<tr onclick="showDetail(${Number(u.id)})">` + cols.map(([k]) => `<td>${cell(u, k)}</td>`).join("") + "</tr>").join("")
+    : `<tr><td colspan="${cols.length}">Không có người dùng phù hợp</td></tr>`;
+  document.getElementById("count").textContent = "Hiển thị " + list.length + " / " + users.length + " người dùng";
+  document.getElementById("sTotal").textContent = users.length;
+  document.getElementById("sAdmin").textContent = users.filter(u => u.role === "ADMIN").length;
+  document.getElementById("sUser").textContent = users.filter(u => u.role === "USER").length;
+}
+
+async function showDetail(id) {
+  const box = document.getElementById("detail"), body = document.getElementById("detailBody");
+  box.style.display = "block";
+  body.innerHTML = "<dt>Đang tải…</dt>";
+  try {
+    const u = await callApi("/api/users/" + id);     // GET /api/users/{id}
+    body.innerHTML = COLS.map(([k, n]) => `<dt>${n}</dt><dd>${cell(u, k) || "<i>(trống)</i>"}</dd>`).join("");
+  } catch (e) { body.innerHTML = "<dt>Lỗi</dt><dd>" + esc(e.message) + "</dd>"; }
+}
+function closeDetail() { document.getElementById("detail").style.display = "none"; }
+
+load();
+</script>
+</body>
+</html>
