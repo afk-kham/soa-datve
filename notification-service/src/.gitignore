@@ -1,0 +1,9 @@
+.tools/
+bin/
+*.exe
+.env
+config.local
+*.log
+.docker-compose.override.yml
+run.bat
+docker-compose.yml
